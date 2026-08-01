@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.dmg
+Codex合并台桌面版.app/
+.DS_Store

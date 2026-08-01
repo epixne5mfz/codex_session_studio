@@ -57,7 +57,7 @@ python3 server.py --open
 扫描多个 Codex 目录：
 
 ```bash
-python3 server.py --open --codex-homes "/path/to/old/.codex,/Users/wangjien/.codex"
+python3 server.py --open --codex-homes "/path/to/old/.codex,~/.codex"
 ```
 
 只检查扫描结果：

@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Codex 聊天记录迁移</title>
+<style>
+  :root {
+    color-scheme: light;
+    --app-bg: #f4f6f7; --card-bg: #ffffff; --surface: #ffffff; --surface-hover: #f1f4f5;
+    --topbar-bg: #ffffff; --input-bg: #fbfdff; --count-bg: #eceff2; --bubble: #f1f4f6;
+    --line: #e2e7eb; --line-strong: #cbd2d9;
+    --text: #182027; --muted: #66717c; --quiet: #8c969f;
+    --primary: #19715f; --primary-dark: #12594b; --primary-soft: #e7f2ef; --danger: #b33b3b;
+    --shadow: 0 1px 2px rgba(16,24,32,.05), 0 8px 24px rgba(16,24,32,.06);
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --app-bg: #12171b; --card-bg: #1b2127; --surface: #1e252c; --surface-hover: #263039;
+    --topbar-bg: #181d22; --input-bg: #161b20; --count-bg: #262e36; --bubble: #232c34;
+    --line: #2b343c; --line-strong: #3a444f;
+    --text: #dfe6ec; --muted: #93a0ac; --quiet: #77828d;
+    --primary: #2fae97; --primary-dark: #37c2a8; --primary-soft: #17332e; --danger: #e06c6c;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; font: 14px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+         background: var(--app-bg); color: var(--text); }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 60px; flex: 0 0 auto;
+           background: var(--topbar-bg); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 650; }
+  .logo { width: 28px; height: 28px; border-radius: 9px; background: var(--primary); color: #fff;
+          display: grid; place-items: center; font-size: 14px; font-weight: 700; }
+  .spacer { flex: 1; }
+  .pill { background: var(--count-bg); color: var(--muted); border-radius: 999px; padding: 3px 11px; font-size: 12px; white-space: nowrap; }
+
+  .banner { margin: 18px 24px 0; padding: 12px 16px; border-radius: 12px; display: flex;
+            align-items: center; gap: 10px; flex-wrap: wrap;
+            background: var(--primary-soft); color: var(--text); font-size: 13px; }
+  .banner b { font-weight: 650; }
+  .banner .who { background: var(--card-bg); border: 1px solid var(--line); border-radius: 8px; padding: 2px 10px; }
+  .guide { margin: 12px 24px 0; padding: 10px 16px; border-radius: 12px; font-size: 12.5px;
+           background: var(--card-bg); border: 1px dashed var(--line-strong); color: var(--muted);
+           display: flex; align-items: center; gap: 10px; }
+  .guide button { height: 28px; }
+
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+         gap: 16px; padding: 14px 20px 18px; }
+  .pane { display: flex; flex-direction: column; min-height: 0; background: var(--card-bg);
+          border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+  .pane > .head { display: flex; align-items: center; gap: 10px; padding: 12px 18px 8px; }
+  .pane h2 { font-size: 14px; margin: 0; font-weight: 650; }
+  .pane .body { padding: 16px 18px 14px; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  .opts { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  .opts summary { cursor: pointer; list-style: none; color: var(--muted); }
+  .opts summary::-webkit-details-marker { display: none; }
+  .opts summary::before { content: "▸ "; }
+  .opts[open] summary::before { content: "▾ "; }
+  .step { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+          background: var(--primary-soft); color: var(--primary); font-size: 11px; font-weight: 700; }
+
+  label.f { display: block; font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+  select, input[type=text], input[type=search] { width: 100%; height: 38px; padding: 0 11px;
+    border: 1px solid var(--line-strong); border-radius: 10px; background: var(--input-bg);
+    color: var(--text); font: inherit; outline: none; }
+  select:focus, input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  button { height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line-strong);
+           background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+  button:hover { background: var(--surface-hover); }
+  button.primary { background: var(--primary); border-color: var(--primary); color: #fff;
+                   font-weight: 650; width: 100%; height: 44px; }
+  button.primary:hover { background: var(--primary-dark); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row-flex { display: flex; gap: 8px; }
+  .row-flex select { flex: 1; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
+  .toolbar input { flex: 1; }
+  .toolbar select { width: auto; flex: 0 0 132px; }
+  .toolbar button { flex: 0 0 auto; }
+  .chips { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+  .chips .path { margin: 0 0 0 4px; overflow: hidden; text-overflow: ellipsis;
+                 white-space: nowrap; max-width: 42%; }
+  .chip { height: 28px; padding: 0 12px; font-size: 12px; border-radius: 999px;
+          white-space: nowrap; flex: 0 0 auto; }
+  .chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .list { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line);
+          border-radius: 12px; background: var(--surface); }
+  .glabel { position: sticky; top: 0; z-index: 1; padding: 6px 14px; font-size: 11.5px;
+            color: var(--quiet); background: var(--card-bg); border-bottom: 1px solid var(--line); }
+  .item { display: flex; gap: 12px; align-items: center; padding: 11px 14px;
+          border-left: 2px solid transparent; }
+  .item + .item { box-shadow: inset 0 1px 0 rgba(128,140,150,.14); }
+  .item:hover { background: var(--surface-hover); }
+  .item.sel { background: var(--primary-soft); border-left-color: var(--primary); }
+  .item .meta { display: flex; gap: 10px; align-items: center; color: var(--quiet);
+                font-size: 11.5px; white-space: nowrap; }
+  .item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); flex: 0 0 auto; }
+  .empty { padding: 28px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+  .empty button { margin-top: 10px; height: 32px; }
+  .item input[type=checkbox] { flex: 0 0 auto; width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
+  .item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+             cursor: pointer; font-size: 13.5px; }
+  .item .t:hover { color: var(--primary); }
+  .item .d { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .tag { flex: 0 0 auto; font-size: 11px; padding: 1px 8px; border-radius: 999px;
+         background: var(--count-bg); color: var(--quiet); white-space: nowrap; }
+  .actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .actions[hidden] { display: none; }
+  .actions button { flex: 1; font-size: 13px; height: 32px; }
+  .actions .danger { color: var(--danger); }
+
+  .field { margin-bottom: 16px; }
+  .stat { font-size: 12.5px; color: var(--muted); margin: 4px 0 14px; }
+  .stat b { color: var(--text); font-weight: 650; font-size: 15px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); }
+  .badge.grey { background: var(--count-bg); color: var(--quiet); }
+  .path { margin: 6px 0 0; font-size: 11.5px; color: var(--quiet);
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+  .ok { color: var(--primary); } .err { color: var(--danger); }
+  #summary { font-size: 13px; margin-top: 14px; }
+  #summary button { margin-top: 8px; width: 100%; }
+  .bar { height: 6px; border-radius: 999px; background: var(--count-bg); overflow: hidden; margin: 8px 0; }
+  .bar > i { display: block; height: 100%; background: var(--primary); width: 0; transition: width .2s; }
+
+  .mask { position: fixed; inset: 0; background: rgba(8,12,16,.55); backdrop-filter: blur(2px);
+          display: flex; align-items: center; justify-content: center; padding: 40px; z-index: 20; }
+  .mask[hidden] { display: none; }
+  .sheet { width: min(820px, 100%); height: min(80vh, 100%); display: flex; flex-direction: column;
+           background: var(--card-bg); border: 1px solid var(--line); border-radius: 16px;
+           box-shadow: var(--shadow); overflow: hidden; }
+  .sheet.narrow { width: min(620px, 100%); height: min(70vh, 100%); }
+  .sheet .top { display: flex; gap: 10px; align-items: center; padding: 14px 18px;
+                border-bottom: 1px solid var(--line); }
+  .sheet .title { flex: 1; min-width: 0; }
+  .sheet .title strong { display: block; font-size: 14px; overflow: hidden;
+                         text-overflow: ellipsis; white-space: nowrap; }
+  .sheet .title span { font-size: 12px; color: var(--muted); }
+  .sheet .sub { padding: 10px 18px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; }
+  .msgs { flex: 1; overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px;
+          background: var(--app-bg); }
+  .row { display: flex; gap: 10px; align-items: flex-start; max-width: 84%; }
+  .row.me { align-self: flex-end; flex-direction: row-reverse; }
+  .avatar { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; display: grid;
+            place-items: center; font-size: 11px; font-weight: 700;
+            background: var(--count-bg); color: var(--muted); }
+  .row.me .avatar { background: var(--primary); color: #fff; }
+  .bubble { background: var(--bubble); border: 1px solid var(--line); border-radius: 12px;
+            padding: 9px 12px; font-size: 13.5px; line-height: 1.65; white-space: pre-wrap;
+            word-break: break-word; }
+  .row.me .bubble { background: var(--primary-soft); border-color: transparent; }
+  .bubble mark { background: #f0c14b55; color: inherit; border-radius: 3px; }
+  .row .when { font-size: 11px; color: var(--quiet); margin-top: 4px; }
+  .row.me .when { text-align: right; }
+  .bubble.clipped { max-height: 260px; overflow: hidden; }
+  .more { background: none; border: none; height: auto; padding: 2px 0; color: var(--primary); font-size: 12px; }
+  .more:hover { background: none; text-decoration: underline; }
+  .trash-list { flex: 1; overflow: auto; }
+  .trash-list .item .t { cursor: default; }
+  .chips input[type=date] { height: 28px; width: 112px; padding: 0 6px; font-size: 11.5px;
+    border: 1px solid var(--line-strong); border-radius: 999px; background: var(--input-bg);
+    color: var(--text); flex: 0 0 auto; font-family: inherit; }
+  .chips input[type=date]::-webkit-calendar-picker-indicator { padding: 0; margin: 0; }
+  .glabel .gsel { float: right; cursor: pointer; color: var(--primary); font-size: 11px; visibility: hidden; }
+  .glabel:hover .gsel { visibility: visible; }
+  .item .snip { display: block; font-size: 11.5px; color: var(--quiet); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+  .item .snip mark { background: #f0c14b55; color: inherit; border-radius: 3px; }
+  .pv-section { padding: 10px 18px; font-size: 13px; }
+  .pv-list { max-height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 10px;
+    margin-top: 6px; padding: 6px 10px; font-size: 12.5px; color: var(--muted); }
+  .pv-list div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">C</span> Codex 聊天记录迁移</div>
+  <span id="meta" class="pill"></span>
+  <span class="spacer"></span>
+  <span id="count" class="pill"></span>
+  <span id="srcBadge" class="badge grey"></span>
+  <button id="backupsBtn">备份管理</button>
+  <button id="trashBtn">回收站</button>
+  <button id="theme" title="切换深色/浅色">◐</button>
+  <button id="rescan">重新扫描</button>
+</header>
+
+<main>
+  <section class="pane">
+    <div class="body">
+      <div class="toolbar">
+        <select id="src" style="flex:1.4"></select>
+        <button id="addHome" title="自动扫描没找到时，手动指定目录">添加目录…</button>
+        <input type="search" id="q" placeholder="搜索标题…" />
+        <select id="prov"><option value="">全部中转</option></select>
+        <select id="sortSel" title="排序方式" style="flex:0 0 108px">
+          <option value="date-desc">日期 ↓</option>
+          <option value="date-asc">日期 ↑</option>
+          <option value="title">标题</option>
+          <option value="provider">中转</option>
+        </select>
+      </div>
+      <div class="chips">
+        <button class="chip on" data-filter="all">全部</button>
+        <button class="chip" data-filter="new">仅新增</button>
+        <button class="chip" data-filter="dup">已存在</button>
+        <button class="chip" data-filter="arch">已归档</button>
+        <span class="spacer"></span>
+        <button class="chip" id="deep" title="同时搜索聊天内容（较慢）">搜内容</button>
+        <input type="date" id="dFrom" title="起始日期" />
+        <input type="date" id="dTo" title="结束日期" />
+        <button class="chip" id="all">全选</button>
+        <button class="chip" id="none">清空</button>
+        <span class="path" id="srcPath"></span>
+      </div>
+      <div class="list" id="chats"></div>
+      <div class="actions" id="actions" hidden>
+        <span class="muted" style="flex:0 0 auto" id="selInfo"></span>
+        <button id="exportSel">导出 MD</button>
+        <button id="archive">归档</button>
+        <button id="unarchive">取消归档</button>
+        <button id="purge">移入回收站</button>
+        <button id="delete" class="danger">彻底删除</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="pane">
+    <div class="body">
+      <div class="field">
+        <label class="f">迁移到 <span id="dstBadge" class="badge"></span></label>
+        <select id="dst"></select>
+        <p class="path" id="dstPath"></p>
+      </div>
+      <div class="stat" id="diff"></div>
+      <button id="go" class="primary">开始迁移</button>
+      <div class="bar" id="bar" hidden><i></i></div>
+      <details class="opts">
+        <summary>更多选项</summary>
+        <label class="f" style="margin-top:10px">Codex 侧栏文件夹（项目名，可留空）</label>
+        <input type="text" id="proj" value="历史记录迁移" placeholder="留空则不分组" />
+        <p class="muted" style="margin:10px 0 0">未勾选时迁移全部。写入前自动备份目标目录；已存在的会话只更新不重复。</p>
+      </details>
+      <div id="summary"></div>
+    </div>
+  </section>
+</main>
+
+<div id="modal" class="mask" hidden>
+  <div class="sheet">
+    <div class="top">
+      <div class="title"><strong id="mTitle"></strong><span id="mMeta"></span></div>
+      <button id="mCopy">复制全文</button>
+      <button id="mExport">导出 Markdown</button>
+      <button id="mClose">关闭</button>
+    </div>
+    <div class="sub"><input type="search" id="mSearch" placeholder="在这个会话里搜索…" /></div>
+    <div class="msgs" id="mBody"></div>
+  </div>
+</div>
+
+<div id="preview" class="mask" hidden>
+  <div class="sheet narrow">
+    <div class="top">
+      <div class="title"><strong>迁移前确认</strong><span id="pvMeta"></span></div>
+      <button id="pvGo" class="primary" style="width:auto;height:38px">确认迁移</button>
+      <button id="pvClose">取消</button>
+    </div>
+    <div style="flex:1;overflow:auto">
+      <div class="pv-section"><b id="pvNewCount"></b><div class="pv-list" id="pvNew"></div></div>
+      <div class="pv-section"><b id="pvDupCount"></b><div class="pv-list" id="pvDup"></div></div>
+    </div>
+  </div>
+</div>
+
+<div id="backups" class="mask" hidden>
+  <div class="sheet narrow">
+    <div class="top">
+      <div class="title"><strong>备份管理</strong><span id="bMeta"></span></div>
+      <button id="bRestore">还原选中</button>
+      <button id="bDelete" class="danger">删除选中</button>
+      <button id="bClose">关闭</button>
+    </div>
+    <div class="trash-list" id="bBody"></div>
+  </div>
+</div>
+
+<div id="trash" class="mask" hidden>
+  <div class="sheet narrow">
+    <div class="top">
+      <div class="title"><strong>回收站</strong><span id="tMeta"></span></div>
+      <button id="tRestore">还原选中</button>
+      <button id="tClose">关闭</button>
+    </div>
+    <div class="trash-list" id="tBody"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let accounts = [];
+let selected = new Set();
+let lastBackups = null;
+let currentMessages = [];
+let currentChat = null;
+let filterMode = "all";
+let sortKey = localStorage.getItem("codex-migrate-sort-key") || "date-desc";
+let trashSelected = new Set();
+let backupSelected = new Set();
+let deepSearch = false;
+let deepHits = null;
+let deepSnippets = {};
+let deepTimer = null;
+let deepSeq = 0;
+
+const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const fmt = (ts) => (ts ? new Date(ts > 1e12 ? ts : ts * 1000).toISOString().slice(0, 10) : "");
+const fmtTime = (ts) => (ts ? new Date(ts > 1e12 ? ts : ts * 1000).toLocaleString("zh-CN", { hour12: false }) : "");
+const currentSource = () => accounts.find((a) => a.sourceFile === $("src").value);
+const currentTarget = () => accounts.find((a) => a.sourceFile === $("dst").value);
+const targetIds = () => new Set(((currentTarget() || {}).chats || []).map((c) => c.threadId));
+const shortPath = (p) => String(p || "").replace(/^\/Users\/[^/]+/, "~");
+const isLive = (a) => /\/\.codex$/.test(a.sourceFile || "");
+
+const post = async (url, body) => {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+};
+
+function accountLabel(a) {
+  const path = a.sourceFile || "";
+  if (isLive(a)) return `当前使用中的 Codex（${a.chats.length} 条）`;
+  const stamp = (path.match(/(\d{4})(\d{2})(\d{2})T/) || []).slice(1).join("-");
+  return `历史备份${stamp ? " " + stamp : ""}（${a.chats.length} 条）`;
+}
+
+function dateRange(a) {
+  const times = (a.chats || []).map((c) => Number(c.updatedAt) || 0).filter(Boolean);
+  if (!times.length) return "";
+  return `${fmt(Math.min(...times))} ～ ${fmt(Math.max(...times))}`;
+}
+
+async function scan(refresh) {
+  $("meta").textContent = "扫描中…";
+  const res = await fetch("/api/scan" + (refresh ? "?refresh=1" : ""));
+  const data = await res.json();
+  accounts = (data.accounts || []).filter((a) => a.sourceFile);
+  $("meta").textContent = `${accounts.length} 个数据目录 · ${data.meta ? data.meta.threads : "?"} 条聊天`;
+  for (const sel of [$("src"), $("dst")]) {
+    const keep = sel.value;
+    sel.innerHTML = accounts.map((a) => `<option value="${a.sourceFile}">${esc(accountLabel(a))}</option>`).join("");
+    if (keep && accounts.some((a) => a.sourceFile === keep)) sel.value = keep;
+  }
+  if (!$("src").dataset.touched && accounts.length > 1) {
+    const cur = accounts.findIndex(isLive);
+    const target = cur >= 0 ? cur : 0;
+    $("dst").selectedIndex = target;
+    $("src").selectedIndex = accounts.findIndex((_, i) => i !== target);
+  }
+  renderProviders();
+  renderChats();
+}
+
+const toMs = (ts) => { const t = Number(ts) || 0; return t > 1e12 ? t : t * 1000; };
+
+function visibleChats() {
+  const acc = currentSource();
+  const q = $("q").value.trim().toLowerCase();
+  const prov = $("prov").value;
+  const inTarget = targetIds();
+  const fromMs = $("dFrom").value ? new Date($("dFrom").value + "T00:00:00").getTime() : 0;
+  const toMsLimit = $("dTo").value ? new Date($("dTo").value + "T23:59:59.999").getTime() : Infinity;
+  return (acc ? acc.chats : []).filter((c) => {
+    if (q) {
+      const titleHit = (c.title || "").toLowerCase().includes(q);
+      const contentHit = deepSearch && deepHits && deepHits.has(c.threadId);
+      if (!titleHit && !contentHit) return false;
+    }
+    if (prov && (c.provider || "未知") !== prov) return false;
+    const ms = toMs(c.updatedAt);
+    if (ms < fromMs || ms > toMsLimit) return false;
+    if (filterMode === "new" && inTarget.has(c.threadId)) return false;
+    if (filterMode === "dup" && !inTarget.has(c.threadId)) return false;
+    if (filterMode === "arch" && !c.archived) return false;
+    return true;
+  }).sort((a, b) => {
+    if (sortKey === "title") return (a.title || "").localeCompare(b.title || "", "zh-Hans-CN");
+    if (sortKey === "provider") return (a.provider || "未知").localeCompare(b.provider || "未知") || (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0);
+    const d = (Number(a.updatedAt) || 0) - (Number(b.updatedAt) || 0);
+    return sortKey === "date-asc" ? d : -d;
+  });
+}
+
+function renderProviders() {
+  const acc = currentSource();
+  const counts = new Map();
+  for (const c of acc ? acc.chats : []) {
+    const key = c.provider || "未知";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const keep = $("prov").value;
+  $("prov").innerHTML =
+    '<option value="">全部中转</option>' +
+    [...counts.entries()].sort((a, b) => b[1] - a[1])
+      .map(([name, n]) => `<option value="${name}">${name}（${n}）</option>`).join("");
+  if (keep && counts.has(keep)) $("prov").value = keep;
+}
+
+function renderPaths() {
+  const src = currentSource();
+  const dst = currentTarget();
+  for (const [acc, pathEl, badgeEl] of [[src, "srcPath", "srcBadge"], [dst, "dstPath", "dstBadge"]]) {
+    if (!acc) { $(pathEl).textContent = ""; $(badgeEl).textContent = ""; continue; }
+    const range = dateRange(acc);
+    $(pathEl).textContent = `${shortPath(acc.sourceFile)}　${acc.chats.length} 条${range ? "　" + range : ""}`;
+    $(badgeEl).textContent = isLive(acc) ? "Codex 正在使用" : "已停用的备份";
+    $(badgeEl).className = "badge" + (isLive(acc) ? "" : " grey");
+  }
+}
+
+function groupOf(ts) {
+  const now = Date.now();
+  const t = Number(ts) || 0;
+  const ms = t > 1e12 ? t : t * 1000;
+  const days = (now - ms) / 86400000;
+  if (days <= 7) return "最近 7 天";
+  if (days <= 30) return "最近 30 天";
+  if (days <= 180) return "半年内";
+  return "更早";
+}
+
+function renderChats() {
+  const chats = visibleChats();
+  const inTarget = targetIds();
+  const q = $("q").value.trim();
+  const useGroups = sortKey === "date-desc" || sortKey === "date-asc";
+  let html = "";
+  let group = null;
+  for (const c of chats) {
+    if (useGroups) {
+      const g = groupOf(c.updatedAt);
+      if (g !== group) { group = g; html += `<div class="glabel">${g}<span class="gsel" data-group="${esc(g)}">全选本组</span></div>`; }
+    }
+    const dup = inTarget.has(c.threadId);
+    const snippet = deepSearch && q && deepSnippets[c.threadId];
+    html += `<div class="item ${selected.has(c.threadId) ? "sel" : ""}">
+      <input type="checkbox" data-id="${c.threadId}" ${selected.has(c.threadId) ? "checked" : ""}/>
+      <span class="t" data-open="${c.threadId}">${esc(c.title || "未命名")}${snippet ? `<span class="snip">${highlight(snippet, q)}</span>` : ""}</span>
+      <span class="meta">
+        ${dup ? '<span class="dot" title="目标目录中已有，迁移时只会更新"></span>' : ""}
+        ${c.archived ? '<span class="tag">已归档</span>' : ""}
+        <span>${esc(c.provider || "未知")}</span>
+        <span class="d" title="${esc(fmtTime(c.updatedAt))}">${fmt(c.updatedAt)}</span>
+      </span></div>`;
+  }
+  $("chats").innerHTML = html ||
+    '<div class="empty">没有符合当前筛选的聊天。<br><button id="clearFilters">清除筛选</button></div>';
+  if ($("clearFilters")) {
+    $("clearFilters").onclick = () => {
+      $("q").value = ""; $("prov").value = ""; $("dFrom").value = ""; $("dTo").value = ""; filterMode = "all";
+      deepHits = null; deepSnippets = {};
+      for (const chip of document.querySelectorAll(".chip[data-filter]")) chip.classList.toggle("on", chip.dataset.filter === "all");
+      renderChats();
+    };
+  }
+  for (const box of $("chats").querySelectorAll("input")) {
+    box.onchange = () => {
+      if (box.checked) selected.add(box.dataset.id);
+      else selected.delete(box.dataset.id);
+      box.closest(".item").classList.toggle("sel", box.checked);
+      setCount();
+    };
+  }
+  for (const el of $("chats").querySelectorAll("[data-open]")) el.onclick = () => openDetail(el.dataset.open);
+  for (const el of $("chats").querySelectorAll(".gsel")) {
+    el.onclick = () => {
+      for (const c of visibleChats()) if (groupOf(c.updatedAt) === el.dataset.group) selected.add(c.threadId);
+      renderChats();
+    };
+  }
+  setCount();
+}
+
+function renderDiff() {
+  const acc = currentSource();
+  const dst = currentTarget();
+  if (!acc || !dst) { $("diff").textContent = ""; return; }
+  const inTarget = targetIds();
+  const pool = selected.size ? acc.chats.filter((c) => selected.has(c.threadId)) : acc.chats;
+  const dup = pool.filter((c) => inTarget.has(c.threadId)).length;
+  $("diff").innerHTML =
+    `本次处理 <b>${pool.length}</b> 条${selected.size ? "（已勾选）" : "（来源全部）"}<br>新增 <b>${pool.length - dup}</b> 条・已存在更新 <b>${dup}</b> 条`;
+}
+
+function setCount() {
+  renderPaths();
+  const vis = visibleChats();
+  $("all").textContent = vis.length && vis.every((c) => selected.has(c.threadId)) ? "取消全选" : "全选";
+  $("count").textContent = `显示 ${vis.length} 条${selected.size ? " · 已选 " + selected.size + " 条" : ""}`;
+  $("actions").hidden = !selected.size;
+  const acc = currentSource();
+  const inTarget = targetIds();
+  const pool = acc ? acc.chats.filter((c) => selected.has(c.threadId)) : [];
+  const dup = pool.filter((c) => inTarget.has(c.threadId)).length;
+  $("selInfo").textContent = `已选 ${selected.size} 条（新增 ${pool.length - dup}，已存在 ${dup}）：`;
+  renderDiff();
+}
+
+/* ---------- 会话详情 ---------- */
+function highlight(text, needle) {
+  const safe = esc(text);
+  if (!needle) return safe;
+  return safe.replace(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m) => `<mark>${m}</mark>`);
+}
+
+function renderMessages() {
+  const needle = $("mSearch").value.trim();
+  const list = needle
+    ? currentMessages.filter((m) => String(m.text || m.content || "").toLowerCase().includes(needle.toLowerCase()))
+    : currentMessages;
+  if (!list.length) {
+    $("mBody").innerHTML = `<div class="muted">${needle ? "没有匹配的消息。" : "这个会话没有可预览的消息。"}</div>`;
+    return;
+  }
+  $("mBody").innerHTML = list.map((m) => {
+    const role = String(m.role || "").toLowerCase();
+    const mine = role === "user";
+    const who = mine ? "我" : role === "system" ? "系统" : "Codex";
+    const text = String(m.text || m.content || "");
+    const long = text.length > 900 && !needle;
+    return `<div class="row ${mine ? "me" : ""}">
+      <div class="avatar">${mine ? "我" : who === "系统" ? "系" : "C"}</div>
+      <div>
+        <div class="bubble ${long ? "clipped" : ""}">${highlight(text, needle)}</div>
+        ${long ? '<button class="more">展开全部</button>' : ""}
+        <div class="when">${who}${m.timestamp ? " · " + fmtTime(m.timestamp) : ""}</div>
+      </div>
+    </div>`;
+  }).join("");
+  for (const btn of $("mBody").querySelectorAll(".more")) {
+    btn.onclick = () => {
+      const bubble = btn.previousElementSibling;
+      bubble.classList.toggle("clipped");
+      btn.textContent = bubble.classList.contains("clipped") ? "展开全部" : "收起";
+    };
+  }
+}
+
+async function openDetail(threadId) {
+  const acc = currentSource();
+  if (!acc) return;
+  currentChat = acc.chats.find((c) => c.threadId === threadId) || null;
+  $("mTitle").textContent = (currentChat && currentChat.title) || "未命名";
+  $("mMeta").textContent = currentChat ? `${currentChat.provider || "未知"} · ${fmtTime(currentChat.updatedAt)}` : "";
+  $("mSearch").value = "";
+  $("mBody").innerHTML = '<div class="muted">加载中…</div>';
+  $("modal").hidden = false;
+  currentMessages = [];
+  try {
+    const res = await fetch(`/api/messages?source=${encodeURIComponent(acc.sourceFile)}&thread=${encodeURIComponent(threadId)}`);
+    const data = await res.json();
+    currentMessages = data.messages || [];
+    if (!currentMessages.length) {
+      $("mBody").innerHTML = `<div class="muted">${esc(data.error || "这个会话没有可预览的消息文件。")}</div>`;
+      return;
+    }
+    renderMessages();
+  } catch (e) {
+    $("mBody").innerHTML = `<div class="err">加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+const asMarkdown = () =>
+  `# ${(currentChat && currentChat.title) || "未命名"}\n\n` +
+  currentMessages
+    .map((m) => `**${String(m.role || "").toLowerCase() === "user" ? "我" : "Codex"}**${m.timestamp ? `（${fmtTime(m.timestamp)}）` : ""}\n\n${m.text || m.content || ""}`)
+    .join("\n\n---\n\n") + "\n";
+
+$("mSearch").oninput = renderMessages;
+$("mCopy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(asMarkdown());
+    $("mCopy").textContent = "已复制";
+    setTimeout(() => { $("mCopy").textContent = "复制全文"; }, 1500);
+  } catch (e) { $("mCopy").textContent = "复制失败"; }
+};
+$("mExport").onclick = () => {
+  const name = ((currentChat && currentChat.title) || "codex-chat").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+  const url = URL.createObjectURL(new Blob([asMarkdown()], { type: "text/markdown;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = `${name}.md`; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+};
+$("mClose").onclick = () => { $("modal").hidden = true; };
+$("modal").onclick = (ev) => { if (ev.target === $("modal")) $("modal").hidden = true; };
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") return;
+  $("modal").hidden = true;
+  $("trash").hidden = true;
+  $("backups").hidden = true;
+  $("preview").hidden = true;
+});
+
+/* ---------- 回收站 ---------- */
+async function openTrash() {
+  trashSelected.clear();
+  $("tBody").innerHTML = '<div class="muted" style="padding:16px">加载中…</div>';
+  $("trash").hidden = false;
+  try {
+    const res = await fetch("/api/trash");
+    const data = await res.json();
+    const entries = data.entries || [];
+    $("tMeta").textContent = `${entries.length} 个已删除会话（移入回收站的可还原）`;
+    $("tBody").innerHTML = entries.length
+      ? entries.map((e) => `<div class="item">
+          <input type="checkbox" data-path="${esc(e.path)}" data-home="${esc(e.home)}" />
+          <span class="t">${esc(e.title || "未命名")}</span>
+          <span class="tag grey">${esc(shortPath(e.home))}</span>
+          <span class="d">删除于 ${fmt(e.deletedAt)}</span></div>`).join("")
+      : '<div class="muted" style="padding:16px">回收站是空的。</div>';
+    for (const box of $("tBody").querySelectorAll("input")) {
+      box.onchange = () => {
+        const key = `${box.dataset.home}|${box.dataset.path}`;
+        if (box.checked) trashSelected.add(key); else trashSelected.delete(key);
+      };
+    }
+  } catch (e) {
+    $("tBody").innerHTML = `<div class="err" style="padding:16px">加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+$("tRestore").onclick = async () => {
+  if (!trashSelected.size) { alert("请先勾选要还原的会话。"); return; }
+  const byHome = new Map();
+  for (const key of trashSelected) {
+    const [home, path] = key.split("|");
+    if (!byHome.has(home)) byHome.set(home, []);
+    byHome.get(home).push(path);
+  }
+  $("tRestore").disabled = true;
+  try {
+    let restored = 0;
+    for (const [home, paths] of byHome) restored += (await post("/api/restore-threads", { home, paths })).restored || 0;
+    alert(`已还原 ${restored} 个会话，重启 Codex 后可见。`);
+    await openTrash();
+    scan(true);
+  } catch (e) {
+    alert(`还原失败：${e.message}`);
+  } finally {
+    $("tRestore").disabled = false;
+  }
+};
+$("trashBtn").onclick = openTrash;
+$("tClose").onclick = () => { $("trash").hidden = true; };
+$("trash").onclick = (ev) => { if (ev.target === $("trash")) $("trash").hidden = true; };
+
+/* ---------- 操作 ---------- */
+$("src").onchange = () => { $("src").dataset.touched = "1"; selected.clear(); renderProviders(); renderChats(); };
+$("dst").onchange = renderChats;
+$("q").oninput = () => { scheduleDeepSearch(); renderChats(); };
+$("prov").onchange = renderChats;
+$("dFrom").onchange = renderChats;
+$("dTo").onchange = renderChats;
+$("sortSel").value = sortKey;
+$("sortSel").onchange = () => {
+  sortKey = $("sortSel").value;
+  localStorage.setItem("codex-migrate-sort-key", sortKey);
+  renderChats();
+};
+
+/* ---------- 内容搜索 ---------- */
+function scheduleDeepSearch() {
+  if (deepTimer) clearTimeout(deepTimer);
+  deepHits = null;
+  deepSnippets = {};
+  if (!deepSearch) return;
+  const q = $("q").value.trim();
+  if (q.length < 2) return;
+  deepTimer = setTimeout(async () => {
+    const acc = currentSource();
+    if (!acc) return;
+    const seq = ++deepSeq;
+    $("deep").textContent = "搜内容中…";
+    try {
+      const res = await fetch(`/api/search?source=${encodeURIComponent(acc.sourceFile)}&q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (seq !== deepSeq) return;
+      deepHits = new Set(data.threadIds || []);
+      deepSnippets = data.snippets || {};
+      renderChats();
+    } catch (e) { /* 忽略搜索失败 */ } finally {
+      if (seq === deepSeq) $("deep").textContent = "搜内容";
+    }
+  }, 400);
+}
+$("deep").onclick = () => {
+  deepSearch = !deepSearch;
+  $("deep").classList.toggle("on", deepSearch);
+  scheduleDeepSearch();
+  renderChats();
+};
+
+/* ---------- 备份管理 ---------- */
+async function openBackups() {
+  backupSelected.clear();
+  $("bBody").innerHTML = '<div class="muted" style="padding:16px">加载中…</div>';
+  $("backups").hidden = false;
+  try {
+    const res = await fetch("/api/backups");
+    const data = await res.json();
+    const entries = data.entries || [];
+    const totalBytes = entries.reduce((sum, e) => sum + (e.size || 0), 0);
+    $("bMeta").textContent = `${entries.length} 个备份文件 · 共 ${(totalBytes / 1048576).toFixed(1)} MB`;
+    $("bBody").innerHTML = entries.length
+      ? entries.map((e) => `<div class="item">
+          <input type="checkbox" data-path="${esc(e.path)}" />
+          <span class="t" title="${esc(e.path)}">${esc(e.original)}<span class="snip">${esc(shortPath(e.home))}</span></span>
+          <span class="tag grey">${(e.size / 1048576).toFixed(2)} MB</span>
+          <span class="d" title="${esc(fmtTime(e.mtime))}">${fmt(e.mtime)}</span></div>`).join("")
+      : '<div class="muted" style="padding:16px">没有备份文件。每次迁移/删除前会自动生成备份。</div>';
+    for (const box of $("bBody").querySelectorAll("input")) {
+      box.onchange = () => {
+        if (box.checked) backupSelected.add(box.dataset.path); else backupSelected.delete(box.dataset.path);
+      };
+    }
+  } catch (e) {
+    $("bBody").innerHTML = `<div class="err" style="padding:16px">加载失败：${esc(e.message)}</div>`;
+  }
+}
+$("backupsBtn").onclick = openBackups;
+$("bClose").onclick = () => { $("backups").hidden = true; };
+$("backups").onclick = (ev) => { if (ev.target === $("backups")) $("backups").hidden = true; };
+$("bDelete").onclick = async () => {
+  if (!backupSelected.size) { alert("请先勾选要删除的备份。"); return; }
+  if (!confirm(`确定删除 ${backupSelected.size} 个备份文件？删除后对应操作将无法撤销。`)) return;
+  $("bDelete").disabled = true;
+  try {
+    const data = await post("/api/delete-backups", { paths: [...backupSelected] });
+    if ((data.errors || []).length) alert(data.errors.join("\n"));
+    await openBackups();
+  } catch (e) {
+    alert(`删除失败：${e.message}`);
+  } finally {
+    $("bDelete").disabled = false;
+  }
+};
+$("bRestore").onclick = async () => {
+  if (!backupSelected.size) { alert("请先勾选要还原的备份。"); return; }
+  if (!confirm(`确定用选中的 ${backupSelected.size} 个备份覆盖当前文件？当前数据会被备份内容替换。`)) return;
+  $("bRestore").disabled = true;
+  try {
+    const data = await post("/api/undo", { backups: [...backupSelected] });
+    alert(`已还原 ${(data.restored || []).length} 个文件，重启 Codex 后生效。`);
+    scan(true);
+  } catch (e) {
+    alert(`还原失败：${e.message}`);
+  } finally {
+    $("bRestore").disabled = false;
+  }
+};
+$("all").onclick = () => {
+  const vis = visibleChats();
+  const allSel = vis.length && vis.every((c) => selected.has(c.threadId));
+  for (const c of vis) allSel ? selected.delete(c.threadId) : selected.add(c.threadId);
+  renderChats();
+};
+$("none").onclick = () => { selected.clear(); renderChats(); };
+$("rescan").onclick = () => scan(true);
+for (const chip of document.querySelectorAll(".chip[data-filter]")) {
+  chip.onclick = () => {
+    filterMode = chip.dataset.filter;
+    for (const other of document.querySelectorAll(".chip[data-filter]")) other.classList.toggle("on", other === chip);
+    renderChats();
+  };
+}
+$("addHome").onclick = async () => {
+  const path = prompt("输入 Codex 数据目录的完整路径（该目录里应有 state_5.sqlite 或 sessions/）：");
+  if (!path) return;
+  try {
+    await post("/api/add-home", { path });
+    await scan(true);
+  } catch (e) {
+    alert(`添加失败：${e.message}`);
+  }
+};
+
+async function restartCodex(btn) {
+  btn.disabled = true;
+  btn.textContent = "正在重启 Codex…";
+  try {
+    await post("/api/restart-codex", {});
+    btn.textContent = "Codex 已重启，请在侧栏查看";
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = `重启失败：${e.message}`;
+  }
+}
+
+async function undoLast(btn) {
+  if (!lastBackups || !lastBackups.length) { alert("没有可撤销的操作。"); return; }
+  if (!confirm("撤销本次操作？目标目录会恢复到操作前的备份。")) return;
+  try {
+    await post("/api/undo", { backups: lastBackups });
+    lastBackups = null;
+    finishSummary('<span class="ok">已撤销，目标目录已恢复。</span>', false);
+    scan(true);
+  } catch (e) {
+    $("summary").innerHTML = `<span class="err">撤销失败：${esc(e.message)}</span>`;
+  }
+}
+
+function finishSummary(html, withUndo) {
+  $("summary").innerHTML = html +
+    '<button id="restart">重启 Codex 查看</button>' +
+    (withUndo ? '<button id="undo">撤销本次操作</button>' : "");
+  $("restart").onclick = () => restartCodex($("restart"));
+  if (withUndo) $("undo").onclick = () => undoLast($("undo"));
+}
+
+async function runThreadAction(mode) {
+  const acc = currentSource();
+  if (!acc || !selected.size) { alert("请先在左侧勾选会话。"); return; }
+  const label = mode === "delete" ? "彻底删除" : mode === "purge" ? "移入回收站" : mode === "unarchive" ? "取消归档" : "归档";
+  const extra = mode === "purge"
+    ? "\n聊天文件会移入回收站，可在右上角「回收站」里还原。"
+    : mode === "delete"
+      ? "\n会话和聊天文件将直接删除，不进回收站（仅能用「撤销本次操作」恢复数据库）。"
+      : "";
+  if (!confirm(`确定${label} ${selected.size} 个会话？${extra}`)) return;
+  $("summary").textContent = `正在${label}…`;
+  try {
+    const data = await post("/api/delete-threads", { home: acc.sourceFile, threadIds: [...selected], mode });
+    const n = data.deleted || data.archived || data.unarchived || 0;
+    lastBackups = data.backups || null;
+    selected.clear();
+    finishSummary(`<span class="ok">已${label} ${n} 个会话。</span>`, true);
+    scan(true);
+  } catch (e) {
+    $("summary").innerHTML = `<span class="err">${label}失败：${esc(e.message)}</span>`;
+  }
+}
+$("exportSel").onclick = async () => {
+  const acc = currentSource();
+  if (!acc || !selected.size) { alert("请先在左侧勾选会话。"); return; }
+  const chats = acc.chats.filter((c) => selected.has(c.threadId));
+  $("exportSel").disabled = true;
+  $("summary").textContent = `正在导出 ${chats.length} 个会话…`;
+  try {
+    const parts = [];
+    let done = 0;
+    for (const c of chats) {
+      let body = "（无可预览消息）";
+      try {
+        const res = await fetch(`/api/messages?source=${encodeURIComponent(acc.sourceFile)}&thread=${encodeURIComponent(c.threadId)}`);
+        const data = await res.json();
+        const msgs = data.messages || [];
+        if (msgs.length) {
+          body = msgs.map((m) => `**${String(m.role || "").toLowerCase() === "user" ? "我" : "Codex"}**${m.timestamp ? `（${fmtTime(m.timestamp)}）` : ""}\n\n${m.text || m.content || ""}`).join("\n\n---\n\n");
+        }
+      } catch (e) { body = `（加载失败：${e.message}）`; }
+      parts.push(`# ${c.title || "未命名"}\n\n> ${c.provider || "未知"} · ${fmtTime(c.updatedAt)}\n\n${body}`);
+      done += 1;
+      $("summary").textContent = `正在导出 ${done}/${chats.length}…`;
+    }
+    const md = parts.join("\n\n\n===\n\n\n") + "\n";
+    const name = `codex-导出-${new Date().toISOString().slice(0, 10)}-${chats.length}条.md`;
+    try {
+      const res = await fetch("/api/save-file", { method: "POST", headers: { "X-Filename": encodeURIComponent(name), "Content-Type": "text/markdown" }, body: md });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      $("summary").innerHTML = `<span class="ok">已导出 ${chats.length} 个会话到 ${esc(shortPath(data.path))}</span>`;
+    } catch (e) {
+      const url = URL.createObjectURL(new Blob([md], { type: "text/markdown;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = name; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      $("summary").innerHTML = `<span class="ok">已导出 ${chats.length} 个会话（浏览器下载）。</span>`;
+    }
+  } finally {
+    $("exportSel").disabled = false;
+  }
+};
+$("archive").onclick = () => runThreadAction("archive");
+$("unarchive").onclick = () => runThreadAction("unarchive");
+$("purge").onclick = () => runThreadAction("purge");
+$("delete").onclick = () => runThreadAction("delete");
+
+$("go").onclick = () => {
+  const source = $("src").value;
+  const target = $("dst").value;
+  if (!source || !target) return;
+  if (source === target) { alert("来源和目标不能是同一个目录。"); return; }
+  const acc = currentSource();
+  if (!acc) return;
+  const pool = selected.size ? acc.chats.filter((c) => selected.has(c.threadId)) : acc.chats;
+  if (!pool.length) { alert("没有可迁移的会话。"); return; }
+  const inTarget = targetIds();
+  const fresh = pool.filter((c) => !inTarget.has(c.threadId));
+  const dups = pool.filter((c) => inTarget.has(c.threadId));
+  const li = (c) => `<div title="${esc(c.title || "未命名")}">${esc(fmt(c.updatedAt))}　${esc(c.title || "未命名")}</div>`;
+  const listOf = (arr) => arr.slice(0, 50).map(li).join("") + (arr.length > 50 ? `<div>… 共 ${arr.length} 条</div>` : "") || '<div>无</div>';
+  $("pvMeta").textContent = `${selected.size ? "已勾选" : "来源全部"} ${pool.length} 条 → ${shortPath(target)}`;
+  $("pvNewCount").textContent = `新增 ${fresh.length} 条`;
+  $("pvDupCount").textContent = `已存在、只会更新 ${dups.length} 条`;
+  $("pvNew").innerHTML = listOf(fresh);
+  $("pvDup").innerHTML = listOf(dups);
+  $("preview").hidden = false;
+};
+$("pvClose").onclick = () => { $("preview").hidden = true; };
+$("preview").onclick = (ev) => { if (ev.target === $("preview")) $("preview").hidden = true; };
+$("pvGo").onclick = async () => {
+  $("preview").hidden = true;
+  const source = $("src").value;
+  const target = $("dst").value;
+  const acc = currentSource();
+  const ids = selected.size ? [...selected] : (acc ? acc.chats.map((c) => c.threadId) : []);
+  if (!ids.length) return;
+
+  const projectName = $("proj").value.trim();
+  $("go").disabled = true;
+  $("summary").textContent = "";
+  $("bar").hidden = false;
+  const fill = $("bar").firstElementChild;
+
+  const chunk = 25;
+  const totals = { inserted: 0, updated: 0, copiedRollouts: 0, skipped: 0, projectAssigned: 0 };
+  const backups = [];
+  try {
+    for (let i = 0; i < ids.length; i += chunk) {
+      const part = ids.slice(i, i + chunk);
+      $("go").textContent = `正在迁移 ${Math.min(i + part.length, ids.length)}/${ids.length}…`;
+      fill.style.width = `${Math.round(((i + part.length) / ids.length) * 100)}%`;
+      const data = await post("/api/apply-merge", { source, target, threadIds: part, projectName });
+      totals.inserted += data.inserted || 0;
+      totals.updated += data.updated || 0;
+      totals.copiedRollouts += data.copiedRollouts || 0;
+      totals.skipped += (data.skipped || []).length;
+      totals.projectAssigned += data.projectAssigned || 0;
+      if (i === 0 && data.backups) backups.push(...data.backups);
+    }
+    lastBackups = backups.length ? backups : null;
+    selected.clear();
+    finishSummary(
+      `<span class="ok">迁移完成：新增 ${totals.inserted} 条，更新 ${totals.updated} 条，复制聊天文件 ${totals.copiedRollouts} 个${totals.skipped ? `，跳过 ${totals.skipped} 条` : ""}。</span>` +
+        (projectName
+          ? `<br>已放入 Codex 侧栏「项目」里的文件夹 <b>${esc(projectName)}</b>（${totals.projectAssigned} 条）；侧栏「最近」按时间排序，旧会话需要往下滚。`
+          : "<br>未指定文件夹，会话按时间排在侧栏「最近」里。"),
+      true
+    );
+    scan(true);
+    if (confirm("迁移完成。现在退出并重新打开 Codex 查看吗？")) restartCodex($("restart"));
+  } catch (e) {
+    $("summary").innerHTML = `<span class="err">迁移失败：${esc(e.message)}</span>`;
+  } finally {
+    $("go").disabled = false;
+    $("go").textContent = "开始迁移";
+    setTimeout(() => { $("bar").hidden = true; fill.style.width = "0"; }, 800);
+  }
+};
+
+const applyTheme = (t) => { document.documentElement.dataset.theme = t; localStorage.setItem("migrate-theme", t); };
+const systemTheme = () => (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+applyTheme(localStorage.getItem("migrate-theme") || systemTheme());
+$("theme").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+
+scan(false);
+</script>
+</body>
+</html>
